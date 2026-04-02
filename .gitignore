@@ -1,0 +1,7 @@
+kv_server
+server.log
+database.txt
+build
+.cache
+compile_commands.json
+

@@ -131,8 +131,11 @@ jobs:
           
       - name: Start Off-CPU Recording
         run: |
-          sudo perf record --off-cpu -e dummy -p $SERVER_PID -g -o offcpu.data &
-          echo "PERF_PID=$!" >> $GITHUB_ENV
+          # Use sudo -E to maintain environment context
+          sudo -E perf record --off-cpu -e dummy -p $SERVER_PID -g -o offcpu.data &
+          sleep 2
+          # Capture the actual perf PID, not the sudo wrapper PID
+          echo "PERF_PID=$(pgrep -n perf)" >> $GITHUB_ENV
           
       - name: Run benchmarking
         run: |
@@ -142,6 +145,7 @@ jobs:
       - name: Stop Profiler and Server
         if: always()
         run: |
+          # Stop perf with SIGINT to flush the BPF maps to the data file
           if [ -n "$PERF_PID" ]; then sudo kill -2 $PERF_PID; sleep 5; fi
           if [ -n "$SERVER_PID" ]; then kill $SERVER_PID || true; fi
 
@@ -149,10 +153,17 @@ jobs:
         if: always()
         run: |
           sudo chmod 666 offcpu.data
-          perf script -i offcpu.data > offcpu.perf
-          ./FlameGraph/stackcollapse-perf.pl offcpu.perf > offcpu.folded
-          ./FlameGraph/flamegraph.pl --color=io --title="Off-CPU Flame Graph" offcpu.folded > offcpu_flamegraph.svg
-      
+          perf script --off-cpu -i offcpu.data > offcpu.perf
+          
+          if [ -s offcpu.perf ]; then
+            ./FlameGraph/stackcollapse-perf.pl offcpu.perf > offcpu.folded
+            ./FlameGraph/flamegraph.pl --color=io --title="Off-CPU Flame Graph" offcpu.folded > offcpu_flamegraph.svg
+          else
+            echo "Error: offcpu.perf is still empty. Checking file headers..."
+            perf report --header -i offcpu.data | head -n 20
+            exit 1
+          fi
+          
       - name: Upload Artifacts
         if: always()
         uses: actions/upload-artifact@v4

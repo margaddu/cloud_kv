@@ -42,7 +42,7 @@ jobs:
           
       - name: Run benchmarking
         run: |
-          sleep 5
+          sleep 2
           python benchmark.py > benchmark_results.txt
 
       - name: Stop Profiler and Server

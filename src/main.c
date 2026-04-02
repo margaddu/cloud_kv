@@ -83,7 +83,7 @@ void *thread_task(void *args) {
             kv_store_put(kv_store, req.key, req.val);
 
             pthread_rwlock_unlock(&rwlock);
-            // kv_store_save_to_disk(kv_store); // Saves to disk for persistence
+            kv_store_save_to_disk(kv_store); // Saves to disk for persistence
             // log_op("PUT", req.key, "OK", req.val); //Display timestamp for PUT
             // printf("User PUT: Key=%s, Val=%s\n", req.key, req.val);
 
@@ -114,7 +114,7 @@ void *thread_task(void *args) {
             pthread_rwlock_unlock(&rwlock);
 
             if(deleted==1){
-                // kv_store_save_to_disk(kv_store); // Saves to disk for persistence
+                kv_store_save_to_disk(kv_store); // Saves to disk for persistence
                 // log_op("DEL", req.key, "OK", NULL); //Display timestamp for DEL
                 respond_success(client_fd);
             }

@@ -5,7 +5,34 @@ on:
   pull_request: 
     branches: ["main"]
 jobs:
-  test:
+  baseline:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Build and run server
+        run: |
+          echo "building\n"
+          make build=release
+
+          echo "starting server\n"
+          ./build/main 5980 &
+
+          echo "SERVER_PID=$!" >> $GITHUB_ENV
+
+      - name: Run benchmarking
+        run: |
+          sleep 2
+          python benchmark.py > benchmark_results.txt
+          
+      - name: Display quick benchmarking result
+        run: cat benchmark_results.txt
+        
+      - name: Peek server.log
+        run: head -n 50 server.log
+
+  on-cpu:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout code
@@ -34,9 +61,7 @@ jobs:
           
       - name: Start Perf Recording
         run: |
-          # Record at 99Hz to minimize overhead, capture call graphs (-g)
-          # We run this in the background targeting the server PID
-          perf record -F 99 -p $SERVER_PID -g -o perf.data &
+          perf record -F 299 -p $SERVER_PID -g -o perf.data &
           echo "PERF_PID=$!" >> $GITHUB_ENV
           
       - name: Run benchmarking
@@ -59,22 +84,68 @@ jobs:
           
           # Collapse stacks and render to SVG
           ./FlameGraph/stackcollapse-perf.pl out.perf > out.folded
-          ./FlameGraph/flamegraph.pl out.folded > flamegraph.svg
+          ./FlameGraph/flamegraph.pl out.folded > oncpu-flamegraph.svg
           
       - name: Upload Artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: performance-reports
+          name: oncpu-reports
           path: |
             benchmark_results.txt
             server.log
-            flamegraph.svg
+            oncpu-flamegraph.svg
             perf.data
             
-      - name: Display quick benchmarking result
-        run: cat benchmark_results.txt
-        
-      - name: Peek server.log
-        run: head -n 50 server.log
+  off-cpu:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+              
+      - name: Install BCC and FlameGraph Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bpfcc-tools linux-headers-$(uname -r)
+          sudo ln -s /usr/sbin/offcputime-bpfcc /usr/local/bin/offcputime
+          # MUST clone this in every job that uses it
+          git clone --depth 1 https://github.com/brendangregg/FlameGraph
+                    
+      - name: Build and run server
+        run: |
+          make build=release
+          ./build/main 5980 &
+          echo "SERVER_PID=$!" >> $GITHUB_ENV
+          
+      - name: Start Off-CPU Recording
+        run: |
+          sudo offcputime -p $SERVER_PID -f 30 > offcpu.folded &
+          echo "OFFCPU_PID=$!" >> $GITHUB_ENV
+          
+      - name: Run benchmarking
+        run: |
+          sleep 2
+          python benchmark.py >> benchmark_results.txt
 
+      - name: Stop Profiler and Server
+        if: always()
+        run: |
+          if [ -n "$OFFCPU_PID" ]; then sudo kill -2 $OFFCPU_PID; sleep 5; fi
+          if [ -n "$SERVER_PID" ]; then kill $SERVER_PID; fi
+
+      - name: Generate Off-CPU FlameGraph
+        if: always()
+        run: |
+          if [ -s offcpu.folded ]; then
+            ./FlameGraph/flamegraph.pl --color=io --title="Off-CPU Flame Graph" offcpu.folded > offcpu_flamegraph.svg
+          fi
+      
+      - name: Upload Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: offcpu-reports
+          path: |
+            benchmark_results.txt
+            server.log
+            offcpu_flamegraph.svg

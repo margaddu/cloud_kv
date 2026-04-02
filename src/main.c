@@ -262,7 +262,7 @@ int main(int argc, char **argv) {
         int client_fd= accept(sock_fd,NULL,NULL);
         if(client_fd==-1){
             if(errno==EINTR){
-                break;
+                continue;
             }
             connection_queue_shutdown(queue);
             for (int i = 0; i < N_THREADS; i++) {

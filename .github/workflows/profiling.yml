@@ -97,6 +97,16 @@ jobs:
             oncpu-flamegraph.svg
             perf.data
             
+      - name: Display quick benchmarking result
+        run: cat benchmark_results.txt
+      - name: Peek server.log
+        run: |
+          if [ -f "server.log" ]; then
+            head -n 50 "server.log"
+          else
+            echo "No log, skipping..."
+          fi
+
   off-cpu:
     runs-on: ubuntu-22.04
     steps:
@@ -131,14 +141,12 @@ jobs:
         if: always()
         run: |
           if [ -n "$OFFCPU_PID" ]; then sudo kill -2 $OFFCPU_PID; sleep 5; fi
-          if [ -n "$SERVER_PID" ]; then kill $SERVER_PID; fi
+          if [ -n "$SERVER_PID" ]; then kill $SERVER_PID || true; fi
 
       - name: Generate Off-CPU FlameGraph
         if: always()
         run: |
-          if [ -s offcpu.folded ]; then
-            ./FlameGraph/flamegraph.pl --color=io --title="Off-CPU Flame Graph" offcpu.folded > offcpu_flamegraph.svg
-          fi
+          ./FlameGraph/flamegraph.pl --color=io --title="Off-CPU Flame Graph" offcpu.folded > offcpu_flamegraph.svg
       
       - name: Upload Artifacts
         if: always()
@@ -149,3 +157,13 @@ jobs:
             benchmark_results.txt
             server.log
             offcpu_flamegraph.svg
+
+      - name: Display quick benchmarking result
+        run: cat benchmark_results.txt
+      - name: Peek server.log
+        run: |
+          if [ -f "server.log" ]; then
+            head -n 50 "server.log"
+          else
+            echo "No log, skipping..."
+          fi

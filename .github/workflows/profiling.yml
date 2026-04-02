@@ -40,5 +40,8 @@ jobs:
           path: |
             benchmark_results.txt
             server.log
-      - name: cat server.log
+      - name: Display quick benchmarking result
+        run: cat benchmark_results.txt
+      - name: Display server.log
         run: cat server.log
+

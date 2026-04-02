@@ -72,7 +72,6 @@ jobs:
       - name: Stop Profiler and Server
         if: always()
         run: |
-          # Stop perf first with SIGINT to ensure it flushes the data file
           if [ -n "$PERF_PID" ]; then kill -2 $PERF_PID; sleep 2; fi
           if [ -n "$SERVER_PID" ]; then kill $SERVER_PID; fi
 
@@ -113,14 +112,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
               
-      - name: Install BCC and FlameGraph Tools
+      - name: Install Profiling Tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y bpfcc-tools linux-headers-$(uname -r)
-          sudo ln -s /usr/sbin/offcputime-bpfcc /usr/local/bin/offcputime
-          # MUST clone this in every job that uses it
+          sudo apt-get install -y linux-tools-common linux-tools-generic linux-tools-$(uname -r)
           git clone --depth 1 https://github.com/brendangregg/FlameGraph
                     
+      - name: Configure Kernel Permissions
+        run: |
+          sudo sysctl -w kernel.perf_event_paranoid=-1
+          sudo sysctl -w kernel.kptr_restrict=0
+          
       - name: Build and run server
         run: |
           make build=release
@@ -129,23 +131,26 @@ jobs:
           
       - name: Start Off-CPU Recording
         run: |
-          sudo offcputime -p $SERVER_PID -f 30 > offcpu.folded &
-          echo "OFFCPU_PID=$!" >> $GITHUB_ENV
+          sudo perf record --off-cpu -e dummy -p $SERVER_PID -g -o offcpu.data &
+          echo "PERF_PID=$!" >> $GITHUB_ENV
           
       - name: Run benchmarking
         run: |
-          sleep 2
-          python benchmark.py >> benchmark_results.txt
+          sleep 5
+          python benchmark.py > benchmark_results.txt
 
       - name: Stop Profiler and Server
         if: always()
         run: |
-          if [ -n "$OFFCPU_PID" ]; then sudo kill -2 $OFFCPU_PID; sleep 5; fi
+          if [ -n "$PERF_PID" ]; then sudo kill -2 $PERF_PID; sleep 5; fi
           if [ -n "$SERVER_PID" ]; then kill $SERVER_PID || true; fi
 
       - name: Generate Off-CPU FlameGraph
         if: always()
         run: |
+          sudo chmod 666 offcpu.data
+          perf script -i offcpu.data > offcpu.perf
+          ./FlameGraph/stackcollapse-perf.pl offcpu.perf > offcpu.folded
           ./FlameGraph/flamegraph.pl --color=io --title="Off-CPU Flame Graph" offcpu.folded > offcpu_flamegraph.svg
       
       - name: Upload Artifacts
@@ -157,7 +162,7 @@ jobs:
             benchmark_results.txt
             server.log
             offcpu_flamegraph.svg
-
+            
       - name: Display quick benchmarking result
         run: cat benchmark_results.txt
       - name: Peek server.log

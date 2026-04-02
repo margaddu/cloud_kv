@@ -153,7 +153,7 @@ jobs:
         if: always()
         run: |
           sudo chmod 666 offcpu.data
-          perf script --off-cpu -i offcpu.data > offcpu.perf
+          perf script -i offcpu.data > offcpu.perf
           
           if [ -s offcpu.perf ]; then
             ./FlameGraph/stackcollapse-perf.pl offcpu.perf > offcpu.folded

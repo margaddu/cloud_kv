@@ -12,6 +12,18 @@ jobs:
         uses: actions/checkout@v4
         
       - run: echo "profiling\n"
+      
+      - name: Install Profiling Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y linux-tools-common linux-tools-generic linux-tools-$(uname -r)
+          git clone --depth 1 https://github.com/brendangregg/FlameGraph
+
+      - name: Configure Kernel Permissions
+        run: |
+          sudo sysctl -w kernel.perf_event_paranoid=-1
+          sudo sysctl -w kernel.kptr_restrict=0
+          
       - run: |
           echo "building\n"
           make build=release
@@ -20,19 +32,37 @@ jobs:
           ./build/main 5980 &
 
           echo "SERVER_PID=$!" >> $GITHUB_ENV
-
-      - name: Wait for server
-        run: sleep 5
+          
+      - name: Start Perf Recording
+        run: |
+          # Record at 99Hz to minimize overhead, capture call graphs (-g)
+          # We run this in the background targeting the server PID
+          perf record -F 99 -p $SERVER_PID -g -o perf.data &
+          echo "PERF_PID=$!" >> $GITHUB_ENV
+          
       - name: Run benchmarking
-        run: python benchmark.py > benchmark_results.txt
+        run: |
+          sleep 5
+          python benchmark.py > benchmark_results.txt
 
-      - name: Stop Server
+      - name: Stop Profiler and Server
         if: always()
         run: |
-          if [ -n "$SERVER_PID" ]; then
-            kill $SERVER_PID
-          fi
-      - name: Upload results
+          # Stop perf first with SIGINT to ensure it flushes the data file
+          if [ -n "$PERF_PID" ]; then kill -2 $PERF_PID; sleep 2; fi
+          if [ -n "$SERVER_PID" ]; then kill $SERVER_PID; fi
+
+      - name: Generate FlameGraph
+        if: always()
+        run: |
+          # Convert perf.data to human-readable script output
+          perf script -i perf.data > out.perf
+          
+          # Collapse stacks and render to SVG
+          ./FlameGraph/stackcollapse-perf.pl out.perf > out.folded
+          ./FlameGraph/flamegraph.pl out.folded > flamegraph.svg
+          
+      - name: Upload Artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -40,8 +70,12 @@ jobs:
           path: |
             benchmark_results.txt
             server.log
+            flamegraph.svg
+            perf.data
+            
       - name: Display quick benchmarking result
         run: cat benchmark_results.txt
+        
       - name: Display server.log
         run: cat server.log
 

@@ -10,7 +10,7 @@ build ?= debug
 CFLAGS = -Wall -Iinclude -MMD -MP
 
 ifeq ($(build), release)
-    CFLAGS += -g -O3
+    CFLAGS += -g -O3 -fno-omit-frame-pointer
 else
     # Debug-specific flags
     CFLAGS += -g -O0 -fno-omit-frame-pointer -fsanitize=address

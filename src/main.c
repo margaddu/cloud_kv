@@ -23,35 +23,35 @@ int keep_going = 1;
 
 pthread_rwlock_t rwlock;
 // int writers_waiting = 0; // Don't get reader locks if writers are waiting?
-static pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
-static const char *LOG_FILE = "server.log";
+// static pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
+// static const char *LOG_FILE = "server.log";
 
 void handle_sigint(int signo) {
     keep_going = 0;
 }
 //Timestamp/Logging function
-static void log_op(const char *op, const char *key, const char *status, const char *value_opt) {
-    time_t now = time(NULL);
-    struct tm tm_now;
-    localtime_r(&now, &tm_now);
+// static void log_op(const char *op, const char *key, const char *status, const char *value_opt) {
+//     time_t now = time(NULL);
+//     struct tm tm_now;
+//     localtime_r(&now, &tm_now);
 
-    char ts[64];
-    strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", &tm_now);
+//     char ts[64];
+//     strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", &tm_now);
 
-    pthread_mutex_lock(&log_mutex);
+//     pthread_mutex_lock(&log_mutex);
 
-    FILE *f = fopen(LOG_FILE, "a");
-    if (f) {
-        if (value_opt) {
-            fprintf(f, "[%s] %s key=%s value=%s status=%s\n", ts, op, key, value_opt, status);
-        } else {
-            fprintf(f, "[%s] %s key=%s status=%s\n", ts, op, key, status);
-        }
-        fclose(f);
-    }
+//     FILE *f = fopen(LOG_FILE, "a");
+//     if (f) {
+//         if (value_opt) {
+//             fprintf(f, "[%s] %s key=%s value=%s status=%s\n", ts, op, key, value_opt, status);
+//         } else {
+//             fprintf(f, "[%s] %s key=%s status=%s\n", ts, op, key, status);
+//         }
+//         fclose(f);
+//     }
 
-    pthread_mutex_unlock(&log_mutex);
-}
+//     pthread_mutex_unlock(&log_mutex);
+// }
 
 typedef struct {
     connection_queue_t* queue;
@@ -83,43 +83,43 @@ void *thread_task(void *args) {
             kv_store_put(kv_store, req.key, req.val);
 
             pthread_rwlock_unlock(&rwlock);
-            kv_store_save_to_disk(kv_store); // Saves to disk for persistence
-            log_op("PUT", req.key, "OK", req.val); //Display timestamp for PUT
-            printf("User PUT: Key=%s, Val=%s\n", req.key, req.val);
+            // kv_store_save_to_disk(kv_store); // Saves to disk for persistence
+            // log_op("PUT", req.key, "OK", req.val); //Display timestamp for PUT
+            // printf("User PUT: Key=%s, Val=%s\n", req.key, req.val);
 
             respond_success(client_fd);
         }
 
         else if(is_get_request(&req) && parse_cmd == 2){
-            printf("User GET: Key=%s\n", req.key);
+            // printf("User GET: Key=%s\n", req.key);
             pthread_rwlock_rdlock(&rwlock);
 
             char* data = kv_store_get(kv_store, req.key);
 
             if (data == NULL) {
-                log_op("GET", req.key, "NOT_FOUND", NULL); //Display timestamp for GET
+                // log_op("GET", req.key, "NOT_FOUND", NULL); //Display timestamp for GET
                 respond_not_found(client_fd);
             } else {
-                log_op("GET", req.key, "OK", data); //Display timestamp for GET
+                // log_op("GET", req.key, "OK", data); //Display timestamp for GET
                 respond_with_payload(client_fd, (uint8_t*)data, strlen(data));
             }
 
             pthread_rwlock_unlock(&rwlock);
         }
         else if(is_del_request(&req) && parse_cmd == 2){
-            printf("User DEL: Key=%s\n", req.key);
+            // printf("User DEL: Key=%s\n", req.key);
 
             pthread_rwlock_wrlock(&rwlock);
             int deleted = kv_store_del(kv_store, req.key);
             pthread_rwlock_unlock(&rwlock);
 
             if(deleted==1){
-                kv_store_save_to_disk(kv_store); // Saves to disk for persistence
-                log_op("DEL", req.key, "OK", NULL); //Display timestamp for DEL
+                // kv_store_save_to_disk(kv_store); // Saves to disk for persistence
+                // log_op("DEL", req.key, "OK", NULL); //Display timestamp for DEL
                 respond_success(client_fd);
             }
             else{
-                log_op("DEL", req.key, "NOT_FOUND", NULL); //Display timestamp for DEL
+                // log_op("DEL", req.key, "NOT_FOUND", NULL); //Display timestamp for DEL
                 respond_not_found(client_fd);
             }
         }

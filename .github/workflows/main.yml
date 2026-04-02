@@ -1,0 +1,11 @@
+name: profiling
+on:
+  push:
+    branches: ["main"]
+  pull_request: 
+    branches: ["main"]
+jobs:
+  test:
+    runs-on: ubuntu-slim
+    steps:
+      - run: echo "profiling\n"
